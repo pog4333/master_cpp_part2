@@ -5,6 +5,7 @@ basic structure, features and use of cvui.
 Code licensed under the MIT license, check LICENSE file.
 */
 #include <ros/ros.h>
+#include "nav_msgs/Odometry.h"
 #include "ros/init.h"
 #include "ros/node_handle.h"
 #include "ros/publisher.h"
@@ -13,15 +14,38 @@ Code licensed under the MIT license, check LICENSE file.
 #include <geometry_msgs/Twist.h>
 #include <string>
 #include <robotinfo_msgs/RobotInfo10Fields.h>
+#include "robot_gui/odometry_msgs.h"
+#include "robot_gui/service_tracker.h"
+#include "robot_gui/trigger_msg_srv.h"
+#include <thread>
 
 // One (and only one) of your C++ files must define CVUI_IMPLEMENTATION
 // before the inclusion of cvui.h to ensure its implementaiton is compiled.
 #define CVUI_IMPLEMENTATION
 #include "robot_gui/cvui.h"
 
+
+
+CVUIROSOdomSubscriber::CVUIROSOdomSubscriber(ros::NodeHandle& nh){
+topic_name = "odom";
+sub_ = nh.subscribe(topic_name, 10, &CVUIROSOdomSubscriber::msgCallback, this);
+}
+void CVUIROSOdomSubscriber::msgCallback(
+    const nav_msgs::Odometry::ConstPtr &msg) {
+  data = *msg;
+//   ROS_INFO("Position x,y,z: [%0.2f, %0.2f, %0.2f]", msg->pose.pose.position.x,
+//             msg->pose.pose.position.y, msg->pose.pose.position.z);
+}
+
+nav_msgs::Odometry CVUIROSOdomSubscriber::run(){
+  
+  return data;
+}
+
+
 class GUI{
 public:
-GUI();
+GUI(ros::NodeHandle& nh, CVUIROSOdomSubscriber* odom_sub);
 void run();
 void info_callback(const robotinfo_msgs::RobotInfo10Fields::ConstPtr &msg);
 protected:
@@ -35,6 +59,7 @@ std::string info7;
 std::string info8;
 
 private:
+CVUIROSOdomSubscriber* o_sub;
 ros::Publisher pub_cmd;
 ros::Subscriber sub_info;
 geometry_msgs::Twist twist;
@@ -42,13 +67,14 @@ std::string topic_name;
 float linear_change = 0.1;
 float angular_change = 0.1;
 const std::string WINDOW_NAME = "GUI ROS TELEOP";
+ros::NodeHandle nh_;
+std::string last_msg_;
 
 };
-GUI::GUI(){
-ros::NodeHandle nh;
+GUI::GUI(ros::NodeHandle& nh, CVUIROSOdomSubscriber* odom_sub):nh_(nh),o_sub(odom_sub){
 topic_name = "cmd_vel";
-pub_cmd = nh.advertise <geometry_msgs::Twist>(topic_name,10);
-sub_info = nh.subscribe("robot_info", 1, &GUI::info_callback, this);
+pub_cmd = nh_.advertise <geometry_msgs::Twist>(topic_name,10);
+sub_info = nh_.subscribe("robot_info", 1, &GUI::info_callback, this);
 
 }
 void GUI::info_callback(const robotinfo_msgs::RobotInfo10Fields::ConstPtr &msg){
@@ -61,8 +87,8 @@ void GUI::info_callback(const robotinfo_msgs::RobotInfo10Fields::ConstPtr &msg){
     info7 = msg->data_field_07;
     info8 = msg->data_field_08; 
     
-    ROS_INFO("info test");
-    ROS_INFO("%s",info1.c_str());
+    // ROS_INFO("info test");
+    // ROS_INFO("%s",info1.c_str());
     // ROS_INFO(info2);
     // ROS_INFO(info3);
     // ROS_INFO(info4);
@@ -75,8 +101,12 @@ void GUI::run(){
 	// Init cvui and tell it to create a OpenCV window, i.e. cv::namedWindow(WINDOW_NAME).
 	cv::namedWindow(WINDOW_NAME);
     cvui::init(WINDOW_NAME);
-
+    CVUIROSTriggerMsgServiceClient sc("get_distance");
 	while (ros::ok()) {
+        nav_msgs::Odometry odom = o_sub->run();
+        float pos_x = odom.pose.pose.position.x;
+        float pos_y = odom.pose.pose.position.y;
+        float pos_z = odom.pose.pose.position.z;
 		// Fill the frame with a nice color
 		frame = cv::Scalar(49, 52, 49);
 
@@ -102,20 +132,23 @@ void GUI::run(){
     // robot position based on odometry
         cvui::printf(frame, 50, 450, 0.8, 0Xffffff, "robot position based on odometry");
 
-        cvui::window(frame,20, 470, 150, 150, "x", 1);
-        cvui::window(frame,200, 470, 150, 150, "y", 1);
-        cvui::window(frame,380, 470, 150, 150, "z", 1);
+        cvui::window(frame,20, 470, 150, 150, "x");
+        cvui::printf(frame,25, 575,"%f", pos_x,1);
+        cvui::window(frame,200, 470, 150, 150, "y");
+        cvui::printf(frame,205, 575,"%f", pos_y,1);        
+        cvui::window(frame,380, 470, 150, 150, "z");
+        cvui::printf(frame,385, 575,"%f", pos_z);
 		
         cvui::printf(frame, 20, 620, 0.6, 0Xffffff, "Distance traveled");
         
         cvui::window(frame, 200, 630, 300, 150, "Distance in meters");
-        
+        if (not last_msg_.empty()) {
+            cvui::printf(frame, 210, 680, 0.4, 0xff0000, "%s",last_msg_.c_str());}
         // Buttons will return true if they were clicked, which makes
 		// handling clicks a breeze.
 		if (cvui::button(frame, 190, 170, "Forward",1)) {
 			// The button was clicked, drive-forward.
             twist.linear.x = twist.linear.x + linear_change;
-            pub_cmd.publish(twist);
            
 		}
 
@@ -123,30 +156,28 @@ void GUI::run(){
 			// The button was clicked, stop.
             twist.linear.x = 0;
             twist.angular.z = 0;
-            pub_cmd.publish(twist);        
 		}
 
 		if (cvui::button(frame, 190, 330, "Backward",1)) {
 			// The button was clicked, drive-backward.
             twist.linear.x = twist.linear.x - linear_change;
-            pub_cmd.publish(twist);		
         }
 
 		if (cvui::button(frame,80, 250, "Left",1)) {
 			// The button was clicked, turn left.
             twist.angular.z = twist.angular.z + angular_change;
-		    pub_cmd.publish(twist);
         }
 
 		if (cvui::button(frame, 370, 250, "Right",1)) {
 			// The button was clicked, turn right.
             twist.angular.z = twist.angular.z - angular_change;
-		    pub_cmd.publish(twist);		
+		   	
         }                
 
 		if (cvui::button(frame, 20, 650, "call",1)) {
 			// The button was clicked, measure distance.
-           
+            last_msg_ = sc.run();
+       
 		}
 
 
@@ -157,7 +188,9 @@ void GUI::run(){
 		// cvui::printf(frame, 250, 90, 0.4, 0xff0000, "Button click count: %d", count);
 
 		// Update cvui stuff and show everything on the screen
-		cvui::update();
+
+        pub_cmd.publish(twist);		
+        cvui::update();
         cvui::imshow(WINDOW_NAME, frame);
         ros::spinOnce();
 
@@ -171,8 +204,14 @@ void GUI::run(){
 int main(int argc, char **argv)
 {
   ros::init(argc,argv,"gui_node");
-  GUI gui;
-  gui.run();
+  ros::NodeHandle nh;
+  CVUIROSOdomSubscriber odom_sub(nh);
+
+  GUI gui(nh, &odom_sub);
+  DistanceTracker ds(nh); 
+  std::thread t1(&GUI::run, &gui);
   ros::spin();
+  t1.join();
+  
 	return 0;
 }

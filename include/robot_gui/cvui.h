@@ -2537,6 +2537,7 @@ void update(const cv::String& theWindowName) {
 	}
 }
 
+
 void handleMouse(int theEvent, int theX, int theY, int /*theFlags*/, void* theData) {
 	int aButtons[3] = { cvui::LEFT_BUTTON, cvui::MIDDLE_BUTTON, cvui::RIGHT_BUTTON };
 	int aEventsDown[3] = { cv::EVENT_LBUTTONDOWN, cv::EVENT_MBUTTONDOWN, cv::EVENT_RBUTTONDOWN };
