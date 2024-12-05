@@ -66,6 +66,8 @@ geometry_msgs::Twist twist;
 std::string topic_name;
 float linear_change = 0.1;
 float angular_change = 0.1;
+float x;
+float z;
 const std::string WINDOW_NAME = "GUI ROS TELEOP";
 ros::NodeHandle nh_;
 std::string last_msg_;
@@ -123,11 +125,11 @@ void GUI::run(){
 
         cvui::window(frame, 50, 400, 120, 40, "Linear velocity:");
     // Show the current velocity inside the window
-        cvui::printf(frame, 50, 425, 0.4, 0xff0000, "m/sec");
-
+        cvui::printf(frame, 50, 425, 0.4, 0xff0000,"%f", x);
+        
         cvui::window(frame, 400, 400, 120, 40, "Angular velocity:");
     // Show the current velocity inside the window
-        cvui::printf(frame, 400, 425, 0.4, 0xff0000, "rad/sec");
+        cvui::printf(frame, 400, 425, 0.4, 0xff0000,"%f", z);
         
     // robot position based on odometry
         cvui::printf(frame, 50, 450, 0.8, 0Xffffff, "robot position based on odometry");
@@ -149,29 +151,35 @@ void GUI::run(){
 		if (cvui::button(frame, 190, 170, "Forward",1)) {
 			// The button was clicked, drive-forward.
             twist.linear.x = twist.linear.x + linear_change;
-           
+            x = twist.linear.x;
 		}
 
 		if (cvui::button(frame,220, 250, "Stop",1)) {
 			// The button was clicked, stop.
             twist.linear.x = 0;
             twist.angular.z = 0;
+            x = twist.linear.x;
+            z = twist.angular.z;
+
 		}
 
 		if (cvui::button(frame, 190, 330, "Backward",1)) {
 			// The button was clicked, drive-backward.
             twist.linear.x = twist.linear.x - linear_change;
+            x = twist.linear.x;
+
         }
 
 		if (cvui::button(frame,80, 250, "Left",1)) {
 			// The button was clicked, turn left.
             twist.angular.z = twist.angular.z + angular_change;
+            z = twist.angular.z;
         }
 
 		if (cvui::button(frame, 370, 250, "Right",1)) {
 			// The button was clicked, turn right.
             twist.angular.z = twist.angular.z - angular_change;
-		   	
+		   	z = twist.angular.z;
         }                
 
 		if (cvui::button(frame, 20, 650, "call",1)) {
