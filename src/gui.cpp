@@ -17,6 +17,7 @@ Code licensed under the MIT license, check LICENSE file.
 #include "robot_gui/odometry_msgs.h"
 #include "robot_gui/service_tracker.h"
 #include "robot_gui/trigger_msg_srv.h"
+#include "robot_gui/gui.h"
 #include <thread>
 
 // One (and only one) of your C++ files must define CVUI_IMPLEMENTATION
@@ -43,36 +44,6 @@ nav_msgs::Odometry CVUIROSOdomSubscriber::run(){
 }
 
 
-class GUI{
-public:
-GUI(ros::NodeHandle& nh, CVUIROSOdomSubscriber* odom_sub);
-void run();
-void info_callback(const robotinfo_msgs::RobotInfo10Fields::ConstPtr &msg);
-protected:
-std::string info1;
-std::string info2;
-std::string info3;
-std::string info4;
-std::string info5;
-std::string info6;
-std::string info7;
-std::string info8;
-
-private:
-CVUIROSOdomSubscriber* o_sub;
-ros::Publisher pub_cmd;
-ros::Subscriber sub_info;
-geometry_msgs::Twist twist;
-std::string topic_name;
-float linear_change = 0.1;
-float angular_change = 0.1;
-float x;
-float z;
-const std::string WINDOW_NAME = "GUI ROS TELEOP";
-ros::NodeHandle nh_;
-std::string last_msg_;
-
-};
 GUI::GUI(ros::NodeHandle& nh, CVUIROSOdomSubscriber* odom_sub):nh_(nh),o_sub(odom_sub){
 topic_name = "cmd_vel";
 pub_cmd = nh_.advertise <geometry_msgs::Twist>(topic_name,10);
@@ -103,8 +74,11 @@ void GUI::run(){
 	// Init cvui and tell it to create a OpenCV window, i.e. cv::namedWindow(WINDOW_NAME).
 	cv::namedWindow(WINDOW_NAME);
     cvui::init(WINDOW_NAME);
-    CVUIROSTriggerMsgServiceClient sc("get_distance");
-	while (ros::ok()) {
+    DistanceTracker ds(nh_); 
+    CVUIROSTriggerMsgServiceClient sc_get(nh_ ,"get_distance");
+    CVUIROSTriggerMsgServiceClient sc_reset(nh_ ,"reset_distance");
+
+    while (ros::ok()) {
         nav_msgs::Odometry odom = o_sub->run();
         float pos_x = odom.pose.pose.position.x;
         float pos_y = odom.pose.pose.position.y;
@@ -184,10 +158,15 @@ void GUI::run(){
 
 		if (cvui::button(frame, 20, 650, "call",1)) {
 			// The button was clicked, measure distance.
-            last_msg_ = sc.run();
+            last_msg_ = sc_get.run();
        
 		}
-
+		if (cvui::button(frame, 20, 720, "reset",1)) {
+			// The button was clicked, measure distance.
+            // ds.reset_distabce();
+            last_msg_ = sc_reset.run();
+       
+		}
 
 		// Sometimes you want to show text that is not that simple, e.g. strings + numbers.
 		// You can use cvui::printf for that. It accepts a variable number of parameter, pretty
@@ -216,7 +195,6 @@ int main(int argc, char **argv)
   CVUIROSOdomSubscriber odom_sub(nh);
 
   GUI gui(nh, &odom_sub);
-  DistanceTracker ds(nh); 
   std::thread t1(&GUI::run, &gui);
   ros::spin();
   t1.join();
